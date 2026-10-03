@@ -1,4 +1,4 @@
-# Anime Assistant — Live2D Overlay (Full Cloud + Wake Lokal)
+# Assistant — Live2D Overlay (Full Cloud + Wake Lokal)
 
 **Spec:** `docs/superpowers/specs/2026-10-03-anime-assistant-live2d-design.md`  
 **Plan:** `docs/superpowers/plans/2026-10-03-anime-assistant-live2d.md`
