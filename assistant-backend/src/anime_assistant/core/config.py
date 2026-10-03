@@ -21,7 +21,8 @@ class ApiKeys:
 @dataclass
 class LlmConfig:
     provider: str = "openai"
-    model: str = "gpt-4o-mini"
+    model: str = "oc/muse-spark-1.2-contributor-free"
+    base_url: str = "http://localhost:20128/v1"
     fallback: str = ""
 
 
@@ -86,6 +87,8 @@ def _parse_config_dict(data: dict) -> Config:
         d = data["llm"]
         cfg.llm.provider = str(d.get("provider", cfg.llm.provider))
         cfg.llm.model = str(d.get("model", cfg.llm.model))
+        if "base_url" in d:
+            cfg.llm.base_url = str(d.get("base_url", cfg.llm.base_url))
         cfg.llm.fallback = str(d.get("fallback", cfg.llm.fallback))
     if "stt" in data:
         d = data["stt"]
@@ -167,6 +170,7 @@ def ensure_default_config(path: Path | str | None = None) -> Path:
             '[llm]\n'
             f'provider = "{cfg.llm.provider}"\n'
             f'model = "{cfg.llm.model}"\n'
+            f'base_url = "{cfg.llm.base_url}"\n'
             f'fallback = "{cfg.llm.fallback}"\n'
             '\n'
             '[stt]\n'

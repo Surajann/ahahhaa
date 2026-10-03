@@ -12,3 +12,6 @@ target/
 .idea/
 .vscode/
 *.log
+# Tauri build artifacts
+assistant-overlay/src-tauri/Cargo.lock
+assistant-overlay/src-tauri/gen/

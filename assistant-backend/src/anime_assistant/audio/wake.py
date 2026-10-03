@@ -8,6 +8,21 @@ from anime_assistant.core.config import Config
 # Optional VAD — we provide a fallback if webrtcvad not installed
 try:
     import webrtcvad  # type: ignore
+    # webrtcvad 2.x imports pkg_resources which may not exist on Python 3.12+ venv
+    # patch it: pkg_resources.get_distribution mock
+    try:
+        import pkg_resources  # noqa: F401
+    except ModuleNotFoundError:
+        import types, sys as _sys
+        _stub = types.ModuleType("pkg_resources")
+        def _get_distribution(name):  # type: ignore[no-untyped-def]
+            class _Dist:
+                version = "2.0.10"
+            return _Dist()
+        _stub.get_distribution = _get_distribution  # type: ignore[attr-defined]
+        _sys.modules["pkg_resources"] = _stub
+        import webrtcvad as _wv2  # type: ignore  # re-import after stub
+        webrtcvad = _wv2
 except Exception:
     webrtcvad = None  # type: ignore[assignment]
 

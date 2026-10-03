@@ -10,11 +10,43 @@ from anime_assistant.core.config import Config
 logger = logging.getLogger(__name__)
 
 
+def _build_llm(config: Config):
+    try:
+        from anime_assistant.providers.llm import OpenAILLM
+
+        api_key = getattr(getattr(config, "api_keys", None), "openai", "") or ""
+        model = getattr(getattr(config, "llm", None), "model", "oc/muse-spark-1.2-contributor-free")
+        base_url = getattr(getattr(config, "llm", None), "base_url", "http://localhost:20128/v1")
+        if not api_key:
+            return None
+        return OpenAILLM(api_key=api_key, model=model, base_url=base_url)
+    except Exception:
+        return None
+
+
+def _build_tts(config: Config):
+    # Try OpenAI TTS first, fallback to gTTS local (no key needed)
+    try:
+        from anime_assistant.providers.tts import OpenAITTS, GTTSTTS
+
+        voice = getattr(getattr(config, "tts", None), "voice_id", "alloy") or "alloy"
+        api_key = getattr(getattr(config, "api_keys", None), "openai", "") or ""
+        if api_key and getattr(getattr(config, "tts", None), "provider", "openai") in ("openai", "gtts"):
+            # OpenAITTS will fallback to gTTS internally if cloud fails
+            return OpenAITTS(api_key=api_key, voice=voice)
+        # No key or provider gtts → direct gTTS
+        return GTTSTTS(lang="id")
+    except Exception:
+        return None
+
+
 def create_app(config: Config | None = None) -> FastAPI:
     if config is None:
         config = Config()
     app = FastAPI()
-    orchestrator = Orchestrator(config=config, memory=None)
+    llm = _build_llm(config)
+    tts = _build_tts(config)
+    orchestrator = Orchestrator(config=config, memory=None, llm=llm, tts=tts)
 
     # Startup validation for empty api_keys (C5) — log only, orchestrator will bubble on wake
     if not orchestrator._has_api_keys():
@@ -52,12 +84,40 @@ def create_app(config: Config | None = None) -> FastAPI:
                     break
                 except Exception:
                     break
+                # Mic→STT path: {transcript, text} or {command:"transcript", text} → LLM→TTS
+                txt: str | None = None
+                if isinstance(data, dict):
+                    if "transcript" in data and isinstance(data["transcript"], str) and data["transcript"].strip():
+                        txt = data["transcript"].strip()
+                    elif data.get("type") in ("stt.final", "transcript.final", "stt_final", "final") and isinstance(data.get("text"), str) and str(data.get("text")).strip():
+                        txt = str(data.get("text")).strip()
+                    elif isinstance(data.get("text"), str) and str(data.get("text")).strip():
+                        # plain {text:"..."} from overlay fallback input
+                        txt = str(data["text"]).strip()
+                if txt:
+                    logger.info("stt final: %s", txt[:200])
+                    # ensure we are in LISTENING or THINKING; barge-in if SPEAKING
+                    if orchestrator.state == "SPEAKING":
+                        await orchestrator.barge_in()
+                    elif orchestrator.state == "IDLE":
+                        await orchestrator._set_state("LISTENING")
+                    await orchestrator.on_stt_final(txt)
+                    continue
                 command = data.get("command") if isinstance(data, dict) else None
                 if command == "startListening":
                     await orchestrator.on_wake(data.get("word", "manual"))
                     # orchestrator already emitted state via _set_state
                 elif command == "stopListening":
                     await orchestrator.handle_timeout()
+                elif command in ("transcript", "stt_final", "sendText"):
+                    t = str(data.get("text", "") or data.get("transcript", "")).strip()
+                    if t:
+                        if orchestrator.state == "SPEAKING":
+                            await orchestrator.barge_in()
+                        elif orchestrator.state == "IDLE":
+                            await orchestrator._set_state("LISTENING")
+                        await orchestrator.on_stt_final(t)
+                    continue
                 elif command == "cancel":
                     await orchestrator.cancel_speaking()
                     if orchestrator.state != "IDLE":

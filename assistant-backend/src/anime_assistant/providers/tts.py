@@ -77,6 +77,68 @@ class ElevenLabsTTS(TTSProvider):
         yield {"audio": audio_bytes, "viseme": {"mouthOpen": float(mouth)}, "durationMs": 200}
 
 
+class GTTSTTS(TTSProvider):
+    """Local-ish TTS via Google Translate (gTTS) — no API key needed, needs internet.
+    Outputs WAV PCM (not MP3) so WebKit/GStreamer without mp3 decoder can play it.
+    """
+
+    def __init__(self, lang: str = "id"):
+        self.lang = lang
+
+    async def stream_synth(self, text: str) -> AsyncIterator[dict]:
+        cleaned, _ = parse_expression(text)
+        t = (cleaned or text).strip()
+        if not t:
+            return
+        audio_bytes: bytes | None = None
+        wav_bytes: bytes | None = None
+        try:
+            from gtts import gTTS
+            import io
+
+            buf = io.BytesIO()
+            import asyncio
+
+            def _synth():
+                g = gTTS(text=t, lang=self.lang, slow=False)
+                g.write_to_fp(buf)
+                return buf.getvalue()
+
+            audio_bytes = await asyncio.to_thread(_synth)
+            # Transcode MP3 → WAV PCM via ffmpeg (WebKit without mp3 decoder needs WAV)
+            if audio_bytes and len(audio_bytes) > 100:
+                try:
+                    import subprocess
+                    import tempfile
+                    import pathlib as _pl
+
+                    with tempfile.TemporaryDirectory() as td:
+                        mp3_path = _pl.Path(td) / "in.mp3"
+                        wav_path = _pl.Path(td) / "out.wav"
+                        mp3_path.write_bytes(audio_bytes)
+                        proc = await asyncio.to_thread(
+                            lambda: subprocess.run(
+                                ["ffmpeg", "-v", "quiet", "-y", "-i", str(mp3_path), "-f", "wav", "-acodec", "pcm_s16le", "-ar", "24000", "-ac", "1", str(wav_path)],
+                                timeout=10,
+                            )
+                        )
+                        if wav_path.exists() and wav_path.stat().st_size > 100:
+                            wav_bytes = wav_path.read_bytes()
+                except Exception:
+                    wav_bytes = None
+        except Exception:
+            audio_bytes = None
+        out = wav_bytes if wav_bytes and len(wav_bytes) > 100 else audio_bytes
+        if not out:
+            out = b"\xff\xfb\x90\x64\x00"
+        mouth = _rms_to_mouth(out if out[:4] != b"RIFF" else out[44:2048])
+        if mouth < 0.05:
+            mouth = 0.6
+        # Prefer WAV for overlay; keep mp3 fallback if ffmpeg missing
+        is_wav = out[:4] == b"RIFF"
+        yield {"audio": out, "viseme": {"mouthOpen": float(mouth)}, "durationMs": 600, "mime": "audio/wav" if is_wav else "audio/mpeg"}
+
+
 class OpenAITTS(TTSProvider):
     def __init__(self, api_key: str, voice: str = "alloy", base_url: str = "https://api.openai.com/v1"):
         self.api_key = api_key
@@ -99,6 +161,13 @@ class OpenAITTS(TTSProvider):
         except Exception:
             audio_bytes = None
         if not audio_bytes:
+            # Fallback to gTTS local so we still have audio without API key
+            try:
+                async for chunk in GTTSTTS(lang="id").stream_synth(t):
+                    yield chunk
+                return
+            except Exception:
+                pass
             audio_bytes = b"\xff\xfb\x90\x64\x00"
         mouth = _rms_to_mouth(audio_bytes)
         if mouth < 0.05:

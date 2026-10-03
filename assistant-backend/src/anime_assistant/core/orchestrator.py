@@ -169,8 +169,16 @@ class Orchestrator:
             async for chunk in self.tts.stream_synth(cleaned):  # type: ignore[union-attr]
                 if self._tts_cancelled:
                     break
+                # WS JSON can't carry bytes → base64
+                import base64
+
+                raw = chunk.get("audio")
+                if isinstance(raw, (bytes, bytearray)):
+                    b64 = base64.b64encode(bytes(raw)).decode()
+                else:
+                    b64 = raw
                 # cap queue: only emit, overlay will queue cap 8
-                await self._emit({"type": "tts.chunk", "audio": chunk.get("audio"), "viseme": chunk.get("viseme"), "durationMs": chunk.get("durationMs", 200)})
+                await self._emit({"type": "tts.chunk", "audio": b64, "audioB64": b64, "viseme": chunk.get("viseme"), "durationMs": chunk.get("durationMs", 200), "mime": chunk.get("mime", "audio/wav")})
             await self.on_tts_done()
         else:
             # No TTS or empty text: go idle
