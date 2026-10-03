@@ -45,7 +45,7 @@ def _save_cache(data: dict) -> None:
         pass
 
 
-def web_search(query: str, count: int = 5) -> dict:
+def web_search(query: str, count: int = 5, api_key: str | None = None) -> dict:
     if not query or not query.strip():
         return {"ok": False, "summary": "", "sources": [], "message": "Query kosong"}
     q = query.strip()
@@ -57,9 +57,21 @@ def web_search(query: str, count: int = 5) -> dict:
         if isinstance(entry, dict) and entry.get("expiresAt", 0) > now:
             return {"ok": True, "summary": entry.get("summary", ""), "sources": entry.get("sources", [])}
 
-    # Tavily API — requires key from env or config; if missing, return mock-friendly result
-    # In tests httpx.post is mocked
-    api_key = os.environ.get("TAVILY_API_KEY", "") or os.environ.get("ANIME_TAVILY_KEY", "")
+    # Tavily API — prefer explicit api_key, then Config api_keys.tavily, then env
+    if api_key is None:
+        api_key = ""
+        # Try loading from config file (no import cycle at runtime)
+        try:
+            from anime_assistant.core.config import load_config
+
+            cfg_path = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))) / "anime-assistant" / "config.toml"
+            cfg = load_config(cfg_path)
+            if cfg.api_keys.tavily:
+                api_key = cfg.api_keys.tavily
+        except Exception:
+            pass
+        if not api_key:
+            api_key = os.environ.get("TAVILY_API_KEY", "") or os.environ.get("ANIME_TAVILY_KEY", "") or os.environ.get("ANIME_ASSISTANT_TAVILY", "")
     # Allow call even without key when mocked; real call will fail gracefully
     try:
         resp = httpx.post(

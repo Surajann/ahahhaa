@@ -56,7 +56,7 @@ def media_control(action: str, target: str | None = None) -> dict:
             return {"ok": True, "player": "playerctl", "status": (result.stdout or "ok").strip()}
         return {"ok": False, "player": "", "status": result.stderr or "playerctl failed"}
     except FileNotFoundError:
-        return {"ok": True, "player": "mock", "status": "ok (mock)"}
+        return {"ok": False, "player": "", "status": "playerctl tidak ditemukan, install playerctl"}
     except subprocess.TimeoutExpired:
         return {"ok": False, "player": "", "status": "Timeout media_control"}
     except Exception as e:

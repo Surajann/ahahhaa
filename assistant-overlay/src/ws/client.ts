@@ -68,6 +68,8 @@ export class WSClient {
 
   handleClose(event: CloseEvent): void {
     void event;
+    this.emit("state", "IDLE");
+    this.emit("error", { bubble: "Koneksi terputus, menyambung lagi..." });
     this.scheduleReconnect();
   }
 
