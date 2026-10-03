@@ -1,0 +1,15 @@
+[Unit]
+Description=Anime Assistant — Live2D Overlay (Full Cloud + Wake Lokal)
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/Projects/anime-assistant/scripts/anime-assistant
+Restart=on-failure
+RestartSec=3
+Environment=XDG_RUNTIME_DIR=%t
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target

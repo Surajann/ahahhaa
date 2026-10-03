@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+DIR="$(cd "$(dirname "$0")/.." && pwd)"
+# Start backend + overlay in parallel
+# Backend
+uv --directory "$DIR" run python -m anime_assistant.server.__main__ &
+BACK_PID=$!
+# Overlay (if built): try tauri, else vite
+if [ -x "$DIR/assistant-overlay/src-tauri/target/release/anime-assistant-overlay" ]; then
+  "$DIR/assistant-overlay/src-tauri/target/release/anime-assistant-overlay" &
+  OVER_PID=$!
+else
+  echo "Overlay binary not built — run: npm --prefix $DIR/assistant-overlay run build && cargo build --release -p anime-assistant-overlay" >&2
+  OVER_PID=""
+fi
+wait $BACK_PID ${OVER_PID:-}
