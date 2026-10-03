@@ -1,0 +1,14 @@
+.superpowers/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.mypy_cache/
+.pytest_cache/
+node_modules/
+dist/
+target/
+.cache/
+.idea/
+.vscode/
+*.log

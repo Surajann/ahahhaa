@@ -1,0 +1,35 @@
+[project]
+name = "anime-assistant"
+version = "0.1.0"
+description = "Anime Assistant Live2D overlay — Full Cloud + Wake Lokal"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "httpx>=0.27",
+    "anyio>=4",
+]
+
+[project.optional-dependencies]
+audio = [
+    "sounddevice>=0.5",
+    "webrtcvad>=2.0.10",
+]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+    "httpx>=0.27",
+    "anyio>=4",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["assistant-backend/tests"]
+asyncio_mode = "auto"
+pythonpath = ["assistant-backend/src"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel.force-include]
+"assistant-backend/src/anime_assistant" = "anime_assistant"
